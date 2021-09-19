@@ -53,10 +53,13 @@ PlayMode::PlayMode() : scene(*hexapod_scene) {
 
 	for (auto& transform : scene.transforms) {
 		if (transform.name == "Fork") fork = &transform;
+		if (transform.name == "cactus") cactus = &transform;
 	}
 	if (fork == nullptr) throw std::runtime_error("Fork not found.");
+	if (cactus == nullptr) throw std::runtime_error("Cactus not found.");
 
-	fork_position = fork->position;
+	init_position = fork->position;
+	init_rotation = fork->rotation;
 
 
 	//get pointer to camera for convenience:
@@ -69,47 +72,121 @@ PlayMode::~PlayMode() {
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
 
+	if (finished == 1) {
+		if (evt.type == SDL_KEYDOWN && evt.key.keysym.sym == SDLK_r) {
+			fork->position = init_position;
+			fork->rotation = init_rotation;
+			fork_velocity = glm::vec3(0.0f);
+			accumulate_rotate = glm::vec2(0.0f);
+			shooted = 0;
+			finished = 0;
+			hit = 0;
+			return true;
+		} 
+		else if (evt.key.keysym.sym == SDLK_ESCAPE) {
+			SDL_SetRelativeMouseMode(SDL_FALSE);
+			return true;
+		} 
+		else {
+			return false;
+		}
+	}
+
+
 	if (evt.type == SDL_KEYDOWN) {
 		if (evt.key.keysym.sym == SDLK_ESCAPE) {
 			SDL_SetRelativeMouseMode(SDL_FALSE);
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_a) {
+		}
+		else if (evt.key.keysym.sym == SDLK_a) {
+			a_key.downs += 1;
+			a_key.pressed = true;
+			return true;
+		}
+		else if (evt.key.keysym.sym == SDLK_d) {
+			d_key.downs += 1;
+			d_key.pressed = true;
+			return true;
+		}
+		else if (evt.key.keysym.sym == SDLK_w) {
+			w_key.downs += 1;
+			w_key.pressed = true;
+			return true;
+		}
+		else if (evt.key.keysym.sym == SDLK_s) {
+			s_key.downs += 1;
+			s_key.pressed = true;
+			return true;
+		}
+		else if (evt.key.keysym.sym == SDLK_LEFT) {
 			left.downs += 1;
 			left.pressed = true;
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_d) {
+		}
+		else if (evt.key.keysym.sym == SDLK_RIGHT) {
 			right.downs += 1;
 			right.pressed = true;
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_w) {
+		}
+		else if (evt.key.keysym.sym == SDLK_UP) {
 			up.downs += 1;
 			up.pressed = true;
 			return true;
-		} else if (evt.key.keysym.sym == SDLK_s) {
+		}
+		else if (evt.key.keysym.sym == SDLK_DOWN) {
 			down.downs += 1;
 			down.pressed = true;
 			return true;
 		}
-	} else if (evt.type == SDL_KEYUP) {
-		if (evt.key.keysym.sym == SDLK_a) {
-			left.pressed = false;
-			return true;
-		} else if (evt.key.keysym.sym == SDLK_d) {
-			right.pressed = false;
-			return true;
-		} else if (evt.key.keysym.sym == SDLK_w) {
-			up.pressed = false;
-			return true;
-		} else if (evt.key.keysym.sym == SDLK_s) {
-			down.pressed = false;
+		else if (evt.key.keysym.sym == SDLK_SPACE && shooted == 0) {
+			shooted = 1;
+			fork_velocity.x = fork_speed * glm::cos(accumulate_rotate.y) * glm::sin(accumulate_rotate.x);
+			fork_velocity.y = fork_speed * glm::cos(accumulate_rotate.y) * glm::cos(accumulate_rotate.x);
+			fork_velocity.z = fork_speed * glm::sin(accumulate_rotate.y);
 			return true;
 		}
-	} else if (evt.type == SDL_MOUSEBUTTONDOWN) {
+	}
+	else if (evt.type == SDL_KEYUP) {
+	if (evt.key.keysym.sym == SDLK_a) {
+		a_key.pressed = false;
+		return true;
+	}
+	else if (evt.key.keysym.sym == SDLK_d) {
+		d_key.pressed = false;
+		return true;
+	}
+	else if (evt.key.keysym.sym == SDLK_w) {
+		w_key.pressed = false;
+		return true;
+	}
+	else if (evt.key.keysym.sym == SDLK_s) {
+		s_key.pressed = false;
+		return true;
+	}
+	else if (evt.key.keysym.sym == SDLK_LEFT) {
+		left.pressed = false;
+		return true;
+	}
+	else if (evt.key.keysym.sym == SDLK_RIGHT) {
+		right.pressed = false;
+		return true;
+	}
+	else if (evt.key.keysym.sym == SDLK_UP) {
+		up.pressed = false;
+		return true;
+	}
+	else if (evt.key.keysym.sym == SDLK_DOWN) {
+		down.pressed = false;
+		return true;
+	}
+	}
+	else if (evt.type == SDL_MOUSEBUTTONDOWN) {
 		if (SDL_GetRelativeMouseMode() == SDL_FALSE) {
 			SDL_SetRelativeMouseMode(SDL_TRUE);
 			return true;
 		}
-	} else if (evt.type == SDL_MOUSEMOTION) {
+	}
+	else if (evt.type == SDL_MOUSEMOTION) {
 		if (SDL_GetRelativeMouseMode() == SDL_TRUE) {
 			glm::vec2 motion = glm::vec2(
 				evt.motion.xrel / float(window_size.y),
@@ -128,46 +205,53 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
+	static std::mt19937 mt;
+	if (finished == 1)
+		return;
+	if (shooted == 1) {
+		fork_velocity.z -= 9.8f * elapsed;
+		fork->position.x += 3* fork_velocity.x * elapsed;
+		fork->position.y += 3* fork_velocity.y * elapsed;
+		fork->position.z += 3* fork_velocity.z * elapsed;
+		if (fork->position.z <= 0.0f || (float)glm::distance(fork->position,cactus->position) <= 1.0f) {
+			shooted = 0;
+			finished = 1;
+			if ((float)glm::distance(fork->position, cactus->position) <= 1.0f) {
+				hit = 1;
+			}
+			fork_velocity = glm::vec3(0.0f);
+		}
+	}
 
-	//slowly rotates through [0,1):
-	wobble = elapsed ;
-	//wobble -= std::floor(wobble);
+	
 
-	fork->position.y += wobble;
-
-	//hip->rotation = hip_base_rotation * glm::angleAxis(
-	//	glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-	//	glm::vec3(0.0f, 1.0f, 0.0f)
-	//);
-	//upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-	//	glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-	//	glm::vec3(0.0f, 0.0f, 1.0f)
-	//);
-	//lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-	//	glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-	//	glm::vec3(0.0f, 0.0f, 1.0f)
-	//);
-
-	//move camera:
+	//move fork direction:
+	if(shooted == 0)
 	{
 
 		//combine inputs into a move:
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
+		constexpr float PlayerSpeed = 1.0f;
+		glm::vec3 move = glm::vec3(0.0f);
+		glm::vec2 rotate = glm::vec2(0.0f);
+		if (left.pressed && !right.pressed && fork->position.x >= -10.0f) move.x =-1.0f;
+		if (!left.pressed && right.pressed && fork->position.x <= 10.0f) move.x = 1.0f;
+		if (down.pressed && !up.pressed && fork->position.z >= 0.1f) move.z =-1.0f;
+		if (!down.pressed && up.pressed && fork->position.z <= 100.0f) move.z = 1.0f;
+		if (a_key.pressed && !d_key.pressed) rotate.x = -1.0f;
+		if (!a_key.pressed && d_key.pressed) rotate.x = 1.0f;
+		if (s_key.pressed && !w_key.pressed) rotate.y = -1.0f;
+		if (!s_key.pressed && w_key.pressed) rotate.y = 1.0f;
 
 		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
+		move *= PlayerSpeed * elapsed;
+		rotate *= PlayerSpeed * elapsed;
+		accumulate_rotate += rotate;
 
-		glm::mat4x3 frame = camera->transform->make_local_to_parent();
-		glm::vec3 right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 forward = -frame[2];
+		fork->position += move;
 
-		camera->transform->position += move.x * right + move.y * forward;
+		fork->rotation = fork->rotation
+			* glm::angleAxis(-rotate.x, glm::vec3(0.0f, 0.0f, 1.0f))
+			* glm::angleAxis(rotate.y, glm::vec3(0.0f, 1.0f, 0.0f));
 	}
 
 	//reset button press counters:
@@ -210,15 +294,45 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			0.0f, 0.0f, 0.0f, 1.0f
 		));
 
-		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		if (finished == 0) {
+			constexpr float H = 0.09f;
+			lines.draw_text("Arrow keys moves; WASD rotate; press space to shoot; escape ungrabs mouse; Q to quit",
+				glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+				glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+			float ofs = 2.0f / drawable_size.y;
+			lines.draw_text("Arrow keys moves; WASD rotate; press space to shoot; escape ungrabs mouse; Q to quit",
+				glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+				glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+				glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		}
+		else {
+			constexpr float H = 0.09f;
+			if (hit == 1) {
+				lines.draw_text("You hit the target! Press R to reset, press Q to quit",
+					glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+					glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+					glm::u8vec4(0xff, 0x00, 0x00, 0x00));
+				float ofs = 2.0f / drawable_size.y;
+				lines.draw_text("You hit the target! Press R to reset, press Q to quit",
+					glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+					glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+					glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+			}
+			else {
+				lines.draw_text("Game over! Press R to reset, press Q to quit",
+					glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
+					glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+					glm::u8vec4(0x00, 0x00, 0x00, 0x00));
+				float ofs = 2.0f / drawable_size.y;
+				lines.draw_text("Game over! Press R to reset, press Q to quit",
+					glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + +0.1f * H + ofs, 0.0),
+					glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
+					glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+			}
+
+
+		}
+
 	}
 }

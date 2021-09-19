@@ -22,7 +22,7 @@ struct PlayMode : Mode {
 	struct Button {
 		uint8_t downs = 0;
 		uint8_t pressed = 0;
-	} left, right, down, up;
+	} left, right, down, up, w_key, a_key, s_key, d_key;
 
 	//local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
@@ -37,7 +37,18 @@ struct PlayMode : Mode {
 	float wobble = 0.0f;
 
 	Scene::Transform* fork = nullptr;
-	glm::vec3 fork_position;
+	Scene::Transform* cactus = nullptr;
+	glm::vec3 init_position = glm::vec3(0.0f,0.0f,0.0f);
+	glm::quat init_rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+	float fork_speed = 10.0f;
+	glm::vec3 fork_velocity = glm::vec3(0.0f);
+	glm::vec2 accumulate_rotate = glm::vec2(0.0f);
+	uint8_t shooted = 0;
+	uint8_t finished = 0;
+	uint8_t hit = 0;
+	float x_offset = 0.0f;
+	float y_offset = 0.0f;
+	float ai_offset_update = 0.0f;
 	
 	//camera:
 	Scene::Camera *camera = nullptr;

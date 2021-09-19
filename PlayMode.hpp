@@ -35,6 +35,9 @@ struct PlayMode : Mode {
 	glm::quat upper_leg_base_rotation;
 	glm::quat lower_leg_base_rotation;
 	float wobble = 0.0f;
+
+	Scene::Transform* fork = nullptr;
+	glm::vec3 fork_position;
 	
 	//camera:
 	Scene::Camera *camera = nullptr;
